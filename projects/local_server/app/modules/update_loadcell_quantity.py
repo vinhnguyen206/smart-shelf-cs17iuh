@@ -103,7 +103,16 @@ HEARTBEAT_INTERVAL = 300  # 5 minutes in seconds
 def should_publish_sensor_data(current_data):
     """Check if sensor data has changed significantly or if heartbeat is due"""
     global previous_sensor_values, last_heartbeat_time
-    
+
+    # Sensors report None until the xG26 delivers its first reading; comparing
+    # None against a float crashes the publish loop every 10s
+    if any(v is None for v in current_data.values()):
+        return False, None
+    if any(previous_sensor_values.get(k) is None for k in current_data):
+        previous_sensor_values.update(current_data)
+        last_heartbeat_time = time.time()
+        return True, "initial"
+
     current_time = time.time()
     
     # Heartbeat check - publish every HEARTBEAT_INTERVAL seconds
