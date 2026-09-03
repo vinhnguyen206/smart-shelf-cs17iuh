@@ -35,6 +35,13 @@ def start_tracking_customer_behavior():
     
     roi_x1, roi_y1 = 50, 0
     roi_x2, roi_y2 = 366, 640
+
+    # No-person timeouts in wall-clock seconds. The old code counted loop
+    # iterations (40/80/120), so the real duration changed whenever the
+    # frame rate changed.
+    NO_PERSON_WARN1_SEC = 20
+    NO_PERSON_WARN2_SEC = 40
+    NO_PERSON_UNPAID_SEC = 60
     ################# PC config #################
     # model_file_path = os.path.abspath(os.path.join(__file__, "../../..", "app/modules/detector/models/yolo11n-person-416-ver2.pt"))
     # model = YOLO(model_file_path)
@@ -58,6 +65,14 @@ def start_tracking_customer_behavior():
     # cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
     ########################################################
     cap = cv2.VideoCapture("/dev/video0")  # for Jetson Nano with USB camera
+    # Explicit capture mode: MJPG 640x480@30 keeps USB bandwidth and CPU
+    # decode low; buffer size 1 (honored by V4L2) so cap.read() returns the
+    # newest frame instead of a stale queued one.
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FPS, 30)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         print("Error: Could not open camera.")
         exit()
@@ -68,83 +83,69 @@ def start_tracking_customer_behavior():
         model(frame)
         # threading.Thread(target=play_sound, args=(sound_file_path_2,)).start()
 
-    alert = 0
+    no_person_since = None
+    warn_stage = 0
     while True:
         if not globals.get_is_tracking():
-            # temporary
-            alert = 0
+            no_person_since = None
+            warn_stage = 0
             customer_frame = None
 
             time.sleep(1)
             continue
-        
-        time.sleep(0.1)  # Add a small delay to reduce CPU usage
-        ret, frame = cap.read()
-        # frame = cv2.resize(frame, (416, 416))
 
+        # cap.read() blocks until the camera delivers the next frame, so it
+        # paces the loop by itself — no artificial sleep needed.
+        ret, frame = cap.read()
         if not ret:
             print("Error: Can't read frame!")
+            time.sleep(0.05)
             continue
-    
-        results = model(frame, conf=0.3, verbose=False)
+
+        # classes=[0]: only "person"; conf=0.5 matches the old post-filter.
+        results = model(frame, conf=0.5, classes=[0], verbose=False)
 
         person_detected = False
 
-        for result in results:
-            boxes = result.boxes
-            for box in boxes:
-                cls = int(box.cls[0].cpu().numpy())
-                conf = float(box.conf[0])
-                if conf > 0.5 and cls == 0:  
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    cx = (x1 + x2) / 2
-                    cy = (y1 + y2) / 2
+        # One batched GPU->CPU transfer instead of one sync per box field.
+        for x1, y1, x2, y2 in results[0].boxes.xyxy.cpu().numpy():
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
 
-                    # Check if person is in ROI
-                    if roi_x1 <= cx <= roi_x2 and roi_y1 <= cy <= roi_y2:
-                        person_detected = True
-                        alert = 0
-                        #print(f"[IN ROI] Person detected at ({int(cx)}, {int(cy)})")
+            # Check if person is in ROI
+            if roi_x1 <= cx <= roi_x2 and roi_y1 <= cy <= roi_y2:
+                person_detected = True
 
-                        if customer_frame is None:
-                            customer_frame = frame.copy()
-                            customer_frame_box = frame.copy()
+                if customer_frame is None:
+                    customer_frame = frame.copy()
+                    customer_frame_box = frame.copy()
 
-                            label = "Customer"
-                            x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
-                            cv2.rectangle(customer_frame_box, (x1, y1), (x2, y2), (0, 255, 0), 2)              
-                            cv2.putText(customer_frame_box, label, (x1, y1 - 10),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                    label = "Customer"
+                    x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+                    cv2.rectangle(customer_frame_box, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(customer_frame_box, label, (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-                            obj = customer_frame_box[y1:y2, x1:x2]
-                            # cv2.imwrite(f"{frame_crop_file_path}/Customer.jpg", obj)
-                            # cv2.imwrite(frame_file_path, customer_frame)
-                            cv2.imwrite(frame_box_file_path, customer_frame_box)
-                        break  # Only process first person in ROI
-                    else:
-                        print(f"[OUTSIDE ROI] Person detected at ({int(cx)}, {int(cy)})")
-            
-            if person_detected:
-                break  # Exit outer loop if person already detected
+                    cv2.imwrite(frame_box_file_path, customer_frame_box)
+                break  # Only process first person in ROI
 
+        if person_detected:
+            no_person_since = None
+            warn_stage = 0
+        else:
+            now = time.monotonic()
+            if no_person_since is None:
+                no_person_since = now
+            elapsed = now - no_person_since
 
-        if not person_detected:
-            print("⚠️  Warning: No person detected.")
-            alert += 1
-            print(f"DEBUG: Alert counter = {alert}")  # Debug log
-            if alert == 40:
-                time.sleep(1)
-                print("DEBUG: Playing sound_file_path_3 (alert == 20)")  # Debug log
-                threading.Thread(target=play_sound, args=(sound_file_path_3,)).start()
-                time.sleep(3)
-            if alert == 80:
-                time.sleep(1)
-                print("DEBUG: Playing sound_file_path_3 (alert == 60)")  # Debug log
-                threading.Thread(target=play_sound, args=(sound_file_path_3,)).start()
-                time.sleep(3)
-            if alert == 120:
-                print("DEBUG: Playing sound_file_path_4 (alert == 100)")  # Debug log
-                threading.Thread(target=play_sound, args=(sound_file_path_4,)).start()
+            if warn_stage == 0 and elapsed >= NO_PERSON_WARN1_SEC:
+                warn_stage = 1
+                threading.Thread(target=play_sound, args=(sound_file_path_3,), daemon=True).start()
+            elif warn_stage == 1 and elapsed >= NO_PERSON_WARN2_SEC:
+                warn_stage = 2
+                threading.Thread(target=play_sound, args=(sound_file_path_3,), daemon=True).start()
+            elif warn_stage == 2 and elapsed >= NO_PERSON_UNPAID_SEC:
+                threading.Thread(target=play_sound, args=(sound_file_path_4,), daemon=True).start()
                 globals.set_unpaid_customer_warning(True)
 
                 # post order data with unpaid status
@@ -159,16 +160,16 @@ def start_tracking_customer_behavior():
                         # Apply discount if exists
                         original_price = p.get("price", 0)
                         discount = p.get("discount", 0)
-                        
+
                         if discount > 0:
                             # Calculate discounted price
                             discounted_price = original_price * (1 - discount / 100)
                             discounted_price = round(discounted_price)
                         else:
                             discounted_price = original_price
-                        
+
                         total_price = qty * discounted_price
-                        
+
                         order_details.append({
                             "product_id": p.get("product_id", p.get("_id", "")),
                             "quantity": qty,
@@ -196,16 +197,11 @@ def start_tracking_customer_behavior():
                     print(f"WARNING: Failed to send unpaid order to cloud: {e}")
                     print("Continuing without cloud sync...")
 
-                alert = 0
+                no_person_since = None
+                warn_stage = 0
                 customer_frame = None
-  
+
                 globals.set_is_tracking(False)
                 globals.set_payment_verified(True)
 
-        # cv2.imshow("Detection", frame)
-        
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
     cap.release()
-    cv2.destroyAllWindows()
