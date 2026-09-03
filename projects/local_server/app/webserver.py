@@ -228,7 +228,7 @@ def connection_health_monitor(socketio_instance):
             current_data = globals.get_loadcell_quantity_snapshot()
             
             # Check if data has changed (indicating fresh updates)
-            if np.all(current_data == last_known_data):
+            if not np.all(np.array(current_data) == np.array(last_known_data)):
                 last_data_time = current_time
                 last_known_data = current_data
                 

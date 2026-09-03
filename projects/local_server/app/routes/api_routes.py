@@ -347,7 +347,7 @@ def refresh_cart():
     socketio = current_app.extensions.get('socketio')
     if socketio:
         # Import here to avoid circular import
-        from utils.websocket_utils import emit_loadcell_update
+        from app.utils.websocket_utils import emit_loadcell_update
         emit_loadcell_update(socketio, globals.loadcell_quantity, cart_with_combos)
     
     return jsonify({
@@ -502,7 +502,7 @@ def clear_cart():
         # Emit WebSocket update
         socketio = current_app.extensions.get('socketio')
         if socketio:
-            from utils.websocket_utils import emit_loadcell_update
+            from app.utils.websocket_utils import emit_loadcell_update
             emit_loadcell_update(socketio, globals.loadcell_quantity, [])
         
         return jsonify({

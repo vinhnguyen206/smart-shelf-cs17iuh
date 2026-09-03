@@ -220,7 +220,10 @@ def register_websocket_handlers(socketio, get_cart_func):
             print(f'Looking for payment with content: "{add_info}" or order_id: "{order_id}"')
             
             timeout = 300  # 300 seconds (5 minutes)
-            interval = 0.3   # Check every 0.3 seconds for fastest response
+            # This polling path is only the fallback when the MQTT webhook is
+            # unavailable; 2s keeps the SePay API load at ~150 requests per
+            # payment window instead of ~1000 at 0.3s.
+            interval = 2
             start = time.time()
             check_count = 0
             
@@ -329,14 +332,16 @@ def register_websocket_handlers(socketio, get_cart_func):
                     # Khang post-payment event handling
                     ### Voice notification success ###
                     total_price = order_data['total_bill']
-                    sound_path = os.path.join(__file__, "../../..", "app/static/sounds/ting.mp3")
-                    play_sound(sound_path)
+                    # abspath is required: mpg123 cannot resolve a path that
+                    # still contains the .py file as a directory component
+                    sound_path = os.path.abspath(os.path.join(__file__, "../../..", "app/static/sounds/ting.mp3"))
+                    threading.Thread(target=play_sound, args=(sound_path,), daemon=True).start()
                     threading.Thread(target=speech_text, args=("Thanh toán thành công " + str(total_price) + " đồng",), daemon=True).start()
-                    
-                    ### Send order data to cloud ###
+
+                    ### Send order data to cloud (background - UI already notified) ###
                     print(order_data)
                     print("Send order data to cloud")
-                    post_order_data_to_cloud(order_data)
+                    threading.Thread(target=post_order_data_to_cloud, args=(order_data,), daemon=True).start()
                     
                     ### Print bill ###
                     if globals.get_print_bill():

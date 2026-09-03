@@ -69,7 +69,9 @@ class VietQRPaymentAPI:
         }
         
         try:
-            response = requests.get(SEPAY_TRANSACTION_URL, headers=headers, params=params, timeout=3)
+            # Reuse the module session: keeps the TLS connection alive between
+            # polls instead of a fresh handshake per request
+            response = session.get(SEPAY_TRANSACTION_URL, headers=headers, params=params, timeout=3)
             if response.status_code == 401:
                 return "unauthorized", None
             response.raise_for_status()
@@ -88,13 +90,13 @@ class VietQRPaymentAPI:
                     reverse=True
                 )
                 
-                for tx in transactions_sorted:
+                for tx_index, tx in enumerate(transactions_sorted):
                     content = tx.get("transaction_content", "")
                     tx_date = tx.get("transaction_date", "")
                     tx_amount = float(tx.get("amount_in", 0))
-                    
+
                     # Debug: Log each transaction being checked
-                    if transactions_sorted.index(tx) < 3:  # Only log first 3 to avoid spam
+                    if tx_index < 3:  # Only log first 3 to avoid spam
                         print(f"[SEPAY] Checking tx: date={tx_date}, amount={tx_amount}, content='{content[:50]}...'")
                     
                     # CRITICAL: Check BOTH order_id AND amount match
