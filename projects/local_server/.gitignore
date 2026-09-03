@@ -1,0 +1,7 @@
+# Local secrets & runtime-generated files
+.env
+database/sepay_info.json
+app/static/sounds/tts_cache/
+app/static/sounds/temp.mp3
+__pycache__/
+*.pyc
