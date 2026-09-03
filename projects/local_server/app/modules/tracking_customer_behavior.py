@@ -37,8 +37,9 @@ def start_tracking_customer_behavior():
     frame_box_file_path = os.path.abspath(os.path.join(__file__, "../../..", "app/static/img/customer_frame/frame_box.jpg"))
     frame_crop_file_path = os.path.abspath(os.path.join(__file__, "../../..", "app/static/img/customer_frame"))
     
+    # ROI calibrated on the real shelf for the 640x480 capture below
     roi_x1, roi_y1 = 50, 0
-    roi_x2, roi_y2 = 366, 640
+    roi_x2, roi_y2 = 590, 480
 
     # No-person timeouts in wall-clock seconds. The old code counted loop
     # iterations (40/80/120), so the real duration changed whenever the
