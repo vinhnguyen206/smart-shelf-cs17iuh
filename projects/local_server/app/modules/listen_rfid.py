@@ -19,7 +19,7 @@ from app.modules import globals
 import keyboard
 import numpy as np
 import threading
-from app.modules.cloud_sync import load_products_from_cloud, load_rfids_from_cloud, post_history_added_products_to_cloud, load_posters_from_cloud, load_combo_from_cloud, load_sepay_info_from_cloud
+from app.modules.cloud_sync import sync_all_from_cloud, post_history_added_products_to_cloud
 from app.utils.file_utils import write_file
 from app.utils.sound_utils import play_sound
 from dotenv import load_dotenv
@@ -59,11 +59,9 @@ def start_listen_rfid():
                         threading.Thread(target=play_sound, args=(sound_file_path_1,)).start()
                         print("Load data from cloud")
                         try:
-                            load_products_from_cloud()
-                            load_rfids_from_cloud()
-                            load_combo_from_cloud()
-                            load_posters_from_cloud()
-                            load_sepay_info_from_cloud()
+                            # All five requests run concurrently: worst case
+                            # ~5s instead of 5 sequential timeouts (~25s)
+                            sync_all_from_cloud()
                         except Exception as e:
                             print(f"Error loading data from cloud: {e}")
                     else : # added
@@ -95,10 +93,15 @@ def start_listen_rfid():
                         }
                         pre_product_ids = [item["product_id"] for item in globals.get_products_data()]
                         pre_verified_quantity = verified_quantity
-                        try:
-                            post_history_added_products_to_cloud(added_products_data)
-                        except Exception as e:
-                            print(f"Error posting history added data to cloud: {e}")
+                        # Post in the background — the payload is already
+                        # snapshotted, and the scan handler shouldn't wait on
+                        # the network
+                        def _post_history(data=added_products_data):
+                            try:
+                                post_history_added_products_to_cloud(data)
+                            except Exception as e:
+                                print(f"Error posting history added data to cloud: {e}")
+                        threading.Thread(target=_post_history, daemon=True).start()
 
                     globals.bool_rfid_devices = True # send weight data and rfid state to devices, if rfid_state is 1 => send weight data
                     globals.bool_rfid = True

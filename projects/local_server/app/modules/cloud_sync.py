@@ -16,13 +16,18 @@
 import requests
 import json
 import os
+import threading
+import time
 import dotenv
 from dotenv import load_dotenv
 from app.modules import globals
 
+# .env is static for the lifetime of the process — parse it once at import
+# instead of re-reading the file inside every cloud call.
+load_dotenv()
+
 def load_products_from_cloud():
     try:
-        load_dotenv()
         url = os.getenv("GET_PRODUCTS_API_KEY")
         if not url:
             print("Warning: GET_PRODUCTS_API_KEY not configured")
@@ -59,7 +64,6 @@ def load_products_from_cloud():
 
 def load_rfids_from_cloud():
     try:
-        load_dotenv()
         url = os.getenv("GET_RFIDS_API_KEY")
         if not url:
             print("Warning: GET_RFIDS_API_KEY not configured")
@@ -83,7 +87,6 @@ def load_rfids_from_cloud():
 
 def load_combo_from_cloud():
     try:
-        load_dotenv()
         url = os.getenv("GET_COMBOS_API_KEY")
         if not url:
             print("Warning: GET_COMBOS_API_KEY not configured")
@@ -119,7 +122,6 @@ def load_combo_from_cloud():
 
 def load_posters_from_cloud():
     try:
-        load_dotenv()
         url = os.getenv("GET_POSTERS_API_KEY")
         if not url:
             print("Warning: GET_POSTERS_API_KEY not configured")
@@ -147,7 +149,6 @@ def load_posters_from_cloud():
 
 def load_sepay_info_from_cloud():
     try:
-        load_dotenv()
         url = os.getenv("GET_SEPAY_INFO_API_KEY")
         if not url:
             print("Warning: GET_SEPAY_INFO_API_KEY not configured")
@@ -171,9 +172,28 @@ def load_sepay_info_from_cloud():
     except Exception as e:
         print(f"Warning: Error loading Sepay info from cloud: {e}")
 
+def sync_all_from_cloud(wait_timeout=8):
+    """Refresh all cloud-backed data (products, rfids, combos, posters, sepay).
+
+    The five GETs run concurrently, so the worst case is one 5s HTTP timeout
+    instead of five in a row (~25s). Each loader already falls back to the
+    local JSON files on failure."""
+    loaders = [
+        load_products_from_cloud,
+        load_rfids_from_cloud,
+        load_combo_from_cloud,
+        load_posters_from_cloud,
+        load_sepay_info_from_cloud,
+    ]
+    threads = [threading.Thread(target=fn, daemon=True) for fn in loaders]
+    for t in threads:
+        t.start()
+    deadline = time.time() + wait_timeout
+    for t in threads:
+        t.join(max(0.0, deadline - time.time()))
+
 def post_order_data_to_cloud(order_data):
     try:
-        load_dotenv()
         file_path = os.path.abspath(os.path.join(__file__, "../../..", "app/static/img/customer_frame/frame_box.jpg"))
         url = os.getenv("POST_ORDER_API_KEY")
         
@@ -205,9 +225,9 @@ def post_order_data_to_cloud(order_data):
         raise
 
 def post_history_added_products_to_cloud(history_added_data):
-    load_dotenv()
     url = os.getenv("POST_HISTORY_ADDED_PRODUCTS_API_KEY")
-    response = requests.post(url, json=history_added_data)
+    # timeout is essential: without it a dead link hangs the RFID thread forever
+    response = requests.post(url, json=history_added_data, timeout=10)
     if response.status_code == 201:
         print("History added data posted successfully")
     else:
