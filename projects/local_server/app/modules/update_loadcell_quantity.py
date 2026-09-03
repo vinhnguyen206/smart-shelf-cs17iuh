@@ -203,8 +203,29 @@ def send_mqtt_data():
             print(f"⚠️ MQTT publish error in send_mqtt_data: {e}")
             # Don't disconnect - let auto-reconnect handle it
 
+# TTS is a network round-trip (gTTS) plus an audio subprocess; it must never
+# run on the BLE notification thread, and the same warning shouldn't repeat
+# back-to-back while the error state persists.
+_last_speech = {"text": None, "time": 0.0}
+
+def _speak_warning_async(text, min_repeat_sec=10):
+    now = time.time()
+    if _last_speech["text"] == text and now - _last_speech["time"] < min_repeat_sec:
+        return
+    _last_speech["text"] = text
+    _last_speech["time"] = now
+
+    def _run():
+        try:
+            speech_text(text)
+        except Exception as e:
+            print(f"TTS warning failed (offline?): {e}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
 def notification_handler_factory(device_name):
     def handler(sender, data):
+        globals.last_data_reception_time = time.time()
         # Flag to reload shopping cart page when loadcell data changes
         globals.set_quantity_change_flag(True)
         new_data = globals.get_loadcell_quantity_snapshot()
@@ -220,7 +241,7 @@ def notification_handler_factory(device_name):
         if loadcell_error_indexes and globals.rfid_state != 1:  # Only warn when not in adding state
             loadcell_error_indexes_str = " và ngăn ".join(map(str, loadcell_error_indexes))
             text = "Cảnh báo sản phẩm đặt tại ngăn thứ " + loadcell_error_indexes_str + " không đúng. Vui lòng đặt sản phẩm lại đúng vị trí."
-            speech_text(text)
+            _speak_warning_async(text)
         # Overite taken quantity when loadcell data changes
         taken_quantity = np.array(globals.get_verified_quantity()) - np.array(globals.get_loadcell_quantity_snapshot())
         
@@ -276,15 +297,16 @@ def notification_handler_factory(device_name):
                 
                 # Apply combo pricing to cart
                 cart_with_combo, applied_combos = update_cart_with_combo_pricing(cart)
-                
+
                 # Log combo application
                 if applied_combos:
                     print(f"Combo applied! {len(applied_combos)} combo(s) detected:")
                     for combo in applied_combos:
                         print(f"  - {combo.get('combo_name')}: {combo.get('savings', 0):,.0f}đ saved")
-                
-                # Emit the update with combo-applied cart
-                emit_loadcell_update(socketio_instance, taken_quantity_list, cart_with_combo)
+
+                # Emit the update with combo-applied cart; pass applied_combos
+                # so the emit does not run the combo solve a second time.
+                emit_loadcell_update(socketio_instance, taken_quantity_list, cart_with_combo, applied_combos)
                 # print(f"WebSocket emitted: taken_quantity={taken_quantity_list}, cart_items={len(cart_with_combo)}")
                 
                 # Also update app cart config for API consistency

@@ -18,7 +18,16 @@ Database utility functions for handling orders and products
 """
 import os
 import json
+import threading
 from datetime import datetime
+
+# In-memory caches keyed by file mtime. The BLE notification handler, socket
+# emits and page renders all call these loaders; a stat() is enough to detect
+# the rewrites done by cloud_sync, so each file is parsed at most once per
+# change instead of once per call.
+_cache_lock = threading.Lock()
+_products_cache = {"mtime": None, "data": []}
+_combos_cache = {"mtime": None, "data": []}
 
 
 def save_order(order_data):
@@ -52,49 +61,51 @@ def save_order_details(order_details):
     except Exception as e:
         pass
 def load_products_from_json():
-    """Load products from products.json"""
+    """Load products from products.json (cached until the file changes)"""
     json_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'products.json')
     try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        mtime = os.path.getmtime(json_path)
+        with _cache_lock:
+            if _products_cache["mtime"] != mtime:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    _products_cache["data"] = json.load(f)
+                _products_cache["mtime"] = mtime
+            return _products_cache["data"]
     except Exception as e:
         return []
 
 
 def load_combos_from_json():
-    """Load combos from combo.json and filter out expired ones"""
+    """Load combos from combo.json (cached until the file changes) and filter out expired ones"""
     json_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'combo.json')
     try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            combos = json.load(f)
-        
-        # Filter out expired combos
+        mtime = os.path.getmtime(json_path)
+        with _cache_lock:
+            if _combos_cache["mtime"] != mtime:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    combos = json.load(f)
+                # Parse validTo (format: 2025-08-15T23:59:59Z) once per file
+                # change; the expiry check itself stays per-call.
+                parsed = []
+                for combo in combos:
+                    valid_to_naive = None
+                    try:
+                        valid_to_str = combo.get('validTo', '')
+                        if valid_to_str:
+                            valid_to_naive = datetime.fromisoformat(
+                                valid_to_str.replace('Z', '+00:00')).replace(tzinfo=None)
+                    except Exception:
+                        # If date parsing fails, include the combo to be safe
+                        valid_to_naive = None
+                    parsed.append((combo, valid_to_naive))
+                _combos_cache["data"] = parsed
+                _combos_cache["mtime"] = mtime
+            parsed = _combos_cache["data"]
+
         current_time = datetime.now()
-        active_combos = []
-        
-        for combo in combos:
-            try:
-                # Parse validTo date (format: 2025-08-15T23:59:59Z)
-                valid_to_str = combo.get('validTo', '')
-                if valid_to_str:
-                    # Remove 'Z' and parse
-                    valid_to_date = datetime.fromisoformat(valid_to_str.replace('Z', '+00:00'))
-                    # Convert to naive datetime for comparison
-                    valid_to_naive = valid_to_date.replace(tzinfo=None)
-                    
-                    if current_time <= valid_to_naive:
-                        active_combos.append(combo)
-                    else:
-                        pass  # Combo expired
-                else:
-                    # If no validTo date, include it (assume always valid)
-                    active_combos.append(combo)
-            except Exception as e:
-                # If date parsing fails, include the combo to be safe
-                active_combos.append(combo)
-        
-        return active_combos
-        
+        return [combo for combo, valid_to in parsed
+                if valid_to is None or current_time <= valid_to]
+
     except Exception as e:
         return []
 

@@ -19,20 +19,28 @@ WebSocket utility functions for handling real-time updates
 from flask_socketio import emit
 
 
-def emit_loadcell_update(socketio, loadcell_data, cart):
-    """Emit loadcell update event to all connected clients with combo pricing applied"""
+def emit_loadcell_update(socketio, loadcell_data, cart, applied_combos=None):
+    """Emit loadcell update event to all connected clients with combo pricing applied.
+
+    Pass applied_combos when the cart already went through
+    update_cart_with_combo_pricing — re-running the solve on a combo-priced
+    cart double-applies buy-X-get-Y promotions.
+    """
     try:
         from app.utils.loadcell_utils import get_error_codes_info, update_cart_with_combo_pricing
         import numpy as np
-        
+
         # Convert numpy array to list for JSON serialization
         if isinstance(loadcell_data, np.ndarray):
             loadcell_data_list = loadcell_data.tolist()
         else:
             loadcell_data_list = loadcell_data if isinstance(loadcell_data, list) else list(loadcell_data)
-        
-        # Apply combo pricing to cart before emitting
-        cart_with_combos, applied_combos = update_cart_with_combo_pricing(cart)
+
+        # Apply combo pricing to cart before emitting (unless already applied)
+        if applied_combos is None:
+            cart_with_combos, applied_combos = update_cart_with_combo_pricing(cart)
+        else:
+            cart_with_combos = cart
         
         error_codes = get_error_codes_info()
         
