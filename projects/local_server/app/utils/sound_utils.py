@@ -29,21 +29,34 @@
 #     player.play()
 
 from gtts import gTTS
+import hashlib
 import subprocess
 import os
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 SOUND_PATH = os.path.join(BASE_DIR, "app/static/sounds/temp.mp3")
+TTS_CACHE_DIR = os.path.join(BASE_DIR, "app/static/sounds/tts_cache")
 
 def speech_text(text):
-    tts = gTTS(text=text, lang='vi', slow=False)
-    tts.save(SOUND_PATH)
+    """Speak Vietnamese text via gTTS with an on-disk cache.
 
-    subprocess.run(
-        ["mpg123", "-q", "-a", "hw:Device,0", SOUND_PATH],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
+    gTTS needs the internet; caching by text hash means any phrase spoken
+    once while online keeps working offline, and repeated phrases skip the
+    network round-trip entirely."""
+    try:
+        cache_path = os.path.join(
+            TTS_CACHE_DIR, hashlib.md5(text.encode("utf-8")).hexdigest() + ".mp3")
+        if not os.path.exists(cache_path):
+            os.makedirs(TTS_CACHE_DIR, exist_ok=True)
+            tts = gTTS(text=text, lang='vi', slow=False)
+            # write to a temp name first so a failed download never leaves a
+            # corrupt mp3 in the cache
+            tts.save(cache_path + ".part")
+            os.replace(cache_path + ".part", cache_path)
+        # play_sound handles device fallback and a 10s timeout
+        play_sound(cache_path)
+    except Exception as e:
+        print(f"speech_text failed (offline and phrase not cached?): {e}")
 
 def play_sound(path):
     # print(f"DEBUG play_sound: Attempting to play: {path}")

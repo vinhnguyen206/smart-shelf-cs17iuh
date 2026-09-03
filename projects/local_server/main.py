@@ -25,48 +25,40 @@ def main():
     
     # Đợi cho WiFi hoặc Hotspot sẵn sàng (timeout 60s)
     print("Checking network connection...")
-    network_ready = wifi_manager.wait_for_wifi(timeout=60)
-    
-    if not network_ready:
-        print("Network timeout - exiting...")
-        return
-    
+    wifi_manager.wait_for_wifi(timeout=60)
+
     # Kiểm tra có kết nối WiFi thật không
     wifi_status = wifi_manager.get_wifi_status()
-    
+
     if wifi_status['connected']:
-        # Có kết nối mạng → Import và chạy TẤT CẢ các module
         print(f"✓ WiFi connected to {wifi_status['ssid']}!")
-        print("Loading modules and starting services...")
-        
-        # Import các module chỉ khi có kết nối mạng
-        import app.webserver as webserver
-        from app.modules import update_loadcell_quantity
-        from app.modules import listen_rfid
-        from app.modules import xg26_sensor
-        from app.modules import tracking_customer_behavior
-        # from app.modules import xg26_voice_command
-        
-        threading.Thread(target=webserver.start_webserver, daemon=True).start()
-        threading.Thread(target=listen_rfid.start_listen_rfid, daemon=True).start()
-        threading.Thread(target=xg26_sensor.start_xg26_sensor, daemon=True).start()
-        threading.Thread(target=update_loadcell_quantity.start_update_loadcell_quantity, daemon=True).start()
-        threading.Thread(target=tracking_customer_behavior.start_tracking_customer_behavior, daemon=True).start()
-        #threading.Thread(target=xg26_voice_command.start_xg26_voice_command, daemon=True).start()
-        
-        print("All services started successfully!")
     else:
-        # Không có kết nối mạng → CHỈ import và chạy WiFi config server
-        print("✗ No WiFi connection detected")
-        print("Starting WiFi configuration mode...")
-        
-        # Import wifi_config_server chỉ khi cần
+        # Offline-first: mọi dịch vụ chính (kiosk UI, loadcell BLE, RFID,
+        # camera, cảm biến) đều chạy được bằng dữ liệu cục bộ — chỉ thanh
+        # toán cần mạng. WiFi config portal chạy song song trên cổng 5001
+        # (5000 là của kiosk webserver).
+        print("✗ No WiFi connection - starting in OFFLINE mode with local data")
         from app.modules import wifi_config_server
-        
-        print(f"Connect to hotspot '{wifi_manager.HOTSPOT_SSID}' and visit http://10.42.0.1:5000")
-        print("After WiFi setup, please reboot Jetson to start all services")
-        
-        threading.Thread(target=wifi_config_server.start_wifi_config_server, daemon=True).start()
+        threading.Thread(target=wifi_config_server.start_wifi_config_server,
+                         kwargs={'port': 5001}, daemon=True).start()
+        print(f"WiFi setup: connect to hotspot '{wifi_manager.HOTSPOT_SSID}' and visit http://10.42.0.1:5001/wifi-setup")
+
+    print("Loading modules and starting services...")
+    import app.webserver as webserver
+    from app.modules import update_loadcell_quantity
+    from app.modules import listen_rfid
+    from app.modules import xg26_sensor
+    from app.modules import tracking_customer_behavior
+    # from app.modules import xg26_voice_command
+
+    threading.Thread(target=webserver.start_webserver, daemon=True).start()
+    threading.Thread(target=listen_rfid.start_listen_rfid, daemon=True).start()
+    threading.Thread(target=xg26_sensor.start_xg26_sensor, daemon=True).start()
+    threading.Thread(target=update_loadcell_quantity.start_update_loadcell_quantity, daemon=True).start()
+    threading.Thread(target=tracking_customer_behavior.start_tracking_customer_behavior, daemon=True).start()
+    #threading.Thread(target=xg26_voice_command.start_xg26_voice_command, daemon=True).start()
+
+    print("All services started successfully!")
 if __name__ == '__main__':
     main()
     while True:

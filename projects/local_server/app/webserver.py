@@ -151,21 +151,10 @@ def set_loadcell_status(connected, status):
 
 @app.route('/vendor/socket.io.min.js')
 def vendor_socketio_js():
-    """Proxy Socket.IO client JS so we can attach security headers locally."""
-    cdn_url = 'https://cdn.socket.io/4.7.2/socket.io.min.js'
-    try:
-        r = requests.get(cdn_url, timeout=10)
-        r.raise_for_status()
-        # Serve with correct MIME type so nosniff doesn't block it
-        resp = app.response_class(r.content, mimetype='application/javascript')
-        # Optional cache headers to reduce repeated fetches
-        resp.headers['Cache-Control'] = 'public, max-age=86400'
-        return resp
-    except Exception as e:
-        # Fallback: return a tiny stub that logs an error
-        fallback = b"window.io = window.io || function(){ console.error('Failed to load Socket.IO client.'); };"
-        resp = app.response_class(fallback, mimetype='application/javascript', status=502)
-        return resp
+    """Serve the vendored Socket.IO client — works with no internet."""
+    resp = app.send_static_file('vendor/socket.io.min.js')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
 
 @app.after_request
 def add_security_headers(response):

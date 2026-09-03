@@ -21,17 +21,13 @@
     <title>Kệ hàng</title>
     
     <!-- Critical Resource Hints -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preconnect" href="https://cdn.socket.io" crossorigin>
     
     <!-- Critical CSS - Load synchronously -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/navigation.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/shelf.css') }}">
     
     <!-- Font CSS - Load asynchronously with high priority -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Aladin&family=Montserrat:wght@300;400;500;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Aladin&family=Montserrat:wght@300;400;500;600;700&display=swap"></noscript>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fonts.css') }}">
     
     <!-- Critical JS - Load early but non-blocking -->
     <link rel="modulepreload" href="{{ url_for('static', filename='js/navigation.js') }}">

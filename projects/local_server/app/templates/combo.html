@@ -21,17 +21,13 @@
     <title>Combo Ưu Đãi</title>
     
     <!-- Critical Resource Hints -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preconnect" href="https://cdn.socket.io" crossorigin>
     
     <!-- Critical CSS -->
     <link rel="stylesheet" href="/static/css/navigation.css">
     <link rel="stylesheet" href="/static/css/combo.css?v=1.0.5">
     
     <!-- Font CSS - Load asynchronously -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Aladin&family=Montserrat:wght@300;400;500;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Aladin&family=Montserrat:wght@300;400;500;600;700&display=swap"></noscript>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fonts.css') }}">
     
     <!-- Module preload for critical JS -->
     <link rel="modulepreload" href="/static/js/navigation.js">
