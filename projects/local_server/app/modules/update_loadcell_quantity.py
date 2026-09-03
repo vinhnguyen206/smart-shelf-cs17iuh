@@ -47,11 +47,10 @@ def on_connect(client, userdata, flags, rc):
 
 def on_disconnect(client, userdata, rc):
     if rc != 0:
-        print(f"⚠️ MQTT Unexpected disconnect: {rc}. Reconnecting...")
-        try:
-            client.reconnect()
-        except Exception as e:
-            print(f"❌ MQTT Reconnect failed: {e}")
+        # loop_start()'s network thread reconnects on its own; calling
+        # client.reconnect() from inside this callback runs on that same
+        # thread and can block/deadlock it on a flaky link
+        print(f"⚠️ MQTT Unexpected disconnect: {rc}. Auto-reconnect will retry...")
 
 def on_publish(client, userdata, mid):
     pass  # Silently confirm publish

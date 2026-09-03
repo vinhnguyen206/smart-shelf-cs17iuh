@@ -13,12 +13,16 @@
 * See the License for the specific language governing permissions and
 * limitations under the License.
 '''
+import os
+# Keep ultralytics fully offline: no version checks, no telemetry, and no
+# model auto-download attempts — these hang for a long time with no internet.
+os.environ.setdefault("YOLO_OFFLINE", "1")
+
 from ultralytics import YOLO
 import cv2
 import numpy as np
 from app.modules import globals
 import time
-import os
 import threading
 from app.utils.sound_utils import play_sound
 from app.modules.cloud_sync import post_order_data_to_cloud
@@ -52,6 +56,12 @@ def start_tracking_customer_behavior():
 
     ################# Jetson nano config #################
     model_file_path = os.path.abspath(os.path.join(__file__, "../../..", "app/modules/detector/models/yolo11n-person-640.engine"))
+    if not os.path.exists(model_file_path):
+        # Fail loudly instead of letting ultralytics try to download the
+        # missing file from the internet
+        print(f"ERROR: TensorRT engine not found: {model_file_path}")
+        print("Build it on the Jetson: cd app/modules/detector/models && python3 convert-model.py")
+        return
     model = YOLO(model_file_path)
     model.overrides['verbose'] = False
     # gst_pipeline = (
