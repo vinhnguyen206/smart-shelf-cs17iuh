@@ -1,49 +1,61 @@
-# Chạy máy không cần gõ lệnh (auto-start)
+# Khởi động kệ có kiểm soát (Control Agent)
 
-Mục tiêu: **cắm điện là chạy**, không phải SSH / docker / python3 nữa.
+Mục tiêu: **cắm điện → Jetson boot + bật hotspot + Control Agent** (vòng bán
+hàng CHƯA chạy). Bạn mở trang điều khiển qua hotspot, thấy mọi thứ **xanh**
+(cân, camera, serial, bluetooth, mạng...) → bấm **Khởi động** thì máy mới vận
+hành. An toàn hơn kiểu "tự chạy mù".
 
-## Cài 1 lần
-
-Trên Jetson (ngoài container, dấu nhắc `dk@jetson:~$`):
-
-```bash
-cd workspace/iot-challenge-2025/khang-jetson/projects/local_server/deploy
-bash setup-autostart.sh
+```
+Cắm điện → Jetson boot → hotspot + Control Agent (luôn chạy)
+              │
+   Mở điện thoại/tablet vào hotspot → http://<jetson-ip>:8088
+              │  thấy health xanh hết
+              ▼  bấm "Khởi động máy"
+        main.py (vòng bán hàng) chạy   ← setting.html nằm trong đây
 ```
 
-Script đặt cho container `iot-2708` tự bật mỗi khi Jetson khởi động
-(`--restart unless-stopped`) và bật Docker theo máy. Chạy lại nhiều lần
-không sao.
+## Cài 1 lần (trên Jetson HOST)
 
-## Sau khi cài
-
-- **Cắm điện → đợi ~3 phút → máy tự chạy.** Không gõ gì cả.
-- Mở tablet vào kiosk như thường.
-
-## Kiểm tra (sau khi cài, hoặc sau khi khởi động lại Jetson)
+Ở dấu nhắc `dk@jetson:~$` (NGOÀI container):
 
 ```bash
-docker logs -f iot-2708 2>&1 | grep --line-buffered Loadcell
+# 1) Lấy thư mục deploy từ container ra host
+docker cp iot-2708:/ultralytics/workspace/iot-challenge-2025/khang-jetson/projects/local_server/deploy /tmp/shelf-deploy
+
+# 2) Cài Control Agent (chạy khi boot)
+sudo bash /tmp/shelf-deploy/setup-control-agent.sh
 ```
 
-- Thấy dòng `[Loadcell_...] Received ...` chạy lên → **máy đang chạy đúng**.
-- Nếu container bật nhưng app (`main.py`) KHÔNG chạy (log trống, không có
-  dòng Loadcell/WiFi) → báo lại, cần thêm bước launcher (systemd) vì entrypoint
-  của container không tự gọi `main.py`. Xem `setup-autostart-launcher.sh` bên dưới.
+Xong. Từ nay **cắm điện → đợi ~1 phút → mở `http://<jetson-ip>:8088`** để xem
+sức khỏe và bấm Khởi động.
 
-## Các lệnh chỉ dùng khi cần
+> Lấy `<jetson-ip>`: script in ra ở cuối, hoặc gõ `hostname -I`. Trên hotspot
+> thường là `10.42.0.1` hoặc `192.168.x.x`.
 
-| Việc | Lệnh |
-|---|---|
-| Xem log cân | `docker logs -f iot-2708 2>&1 \| grep --line-buffered Loadcell` |
-| Khởi động lại app | `docker restart iot-2708` |
-| Tắt app tới lần bật tay kế tiếp | `docker stop iot-2708` |
-| Tắt hẳn Jetson | `sudo shutdown -h now` |
+## Trang điều khiển làm gì
+
+- **Health**: Container / Camera / Cổng cân (serial) / Bluetooth / Model AI / Internet + trạng thái Wifi
+- **▶ Khởi động máy**: bật container (nếu tắt) rồi chạy `main.py`
+- **⏹ Dừng máy**: tắt `main.py` (container vẫn còn, bấm Khởi động lại nhanh)
+
+## Kiểm tra / gỡ lỗi
+
+```bash
+systemctl status control-agent --no-pager   # agent có chạy không
+journalctl -u control-agent -f              # log của agent
+docker logs -f iot-2708 2>&1 | grep --line-buffered Loadcell  # log vòng bán hàng
+```
+
+## Cần xác nhận ở buổi test tới
+
+Nút **Khởi động** đang chạy `main.py` bằng:
+`docker exec -d iot-2708 bash -lc "cd <workdir> && python3 main.py"`.
+Hôm 3/9 cách `docker exec` từng thiếu `cv2` (thiếu biến môi trường), nên khi
+test cần xác nhận lệnh này nạp đúng môi trường (có `cv2`). Nếu không, ta chỉnh
+lại cách khởi động (dùng entrypoint của container). Báo lại kết quả là tôi sửa.
 
 ## Ghi chú
 
-- `unless-stopped`: container tự bật lại khi mất điện/khởi động **và** khi app
-  crash — TRỪ khi bạn cố ý `docker stop`. Vậy bạn vẫn tắt tay được khi muốn.
-- Cần xác nhận 1 điều ở buổi test tới: container `iot-2708` khi `docker start`
-  có tự gọi `main.py` không. Hôm test thấy có (log WiFi/loadcell tự hiện), nên
-  nhiều khả năng chỉ cần script này là đủ. Nếu không, ta thêm launcher.
+- `setup-autostart.sh` (file cũ) là kiểu **tự chạy vòng bán hàng ngay khi boot**
+  — KHÔNG dùng chung với Control Agent. Chọn 1 trong 2: có kiểm soát
+  (control-agent) hoặc tự chạy mù (autostart). Khuyên dùng **control-agent**.

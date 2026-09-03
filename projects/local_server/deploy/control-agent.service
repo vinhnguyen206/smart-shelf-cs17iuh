@@ -1,0 +1,14 @@
+[Unit]
+Description=Smart Shelf Control Agent (health + start/stop panel)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs as root so it can drive docker / nmcli / hcitool without a password.
+ExecStart=/usr/bin/python3 /opt/shelf-control/control_agent.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
