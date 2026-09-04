@@ -120,10 +120,12 @@ def start_vending():
     run("sudo docker start %s" % CONTAINER)
     if main_py_running():
         return "already running"
-    # -d detached; login shell so the container's environment is loaded
+    # -d detached; -i INTERACTIVE bash so ~/.bashrc runs and activates the
+    # uv/venv that puts cv2 + CUDA on the path (a login shell -lc does NOT
+    # source .bashrc, so cv2 is missing there and main.py crashes on import).
     rc, out = run(
-        'sudo docker exec -d %s bash -lc "cd %s && python3 main.py '
-        '>> /tmp/main.log 2>&1"' % (CONTAINER, WORKDIR))
+        "sudo docker exec -d %s bash -ic 'cd %s && python3 main.py "
+        ">> /tmp/main.log 2>&1'" % (CONTAINER, WORKDIR))
     return "started" if rc == 0 else "start failed: %s" % out
 
 
