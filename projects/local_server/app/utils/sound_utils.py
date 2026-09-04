@@ -32,6 +32,13 @@ from gtts import gTTS
 import hashlib
 import subprocess
 import os
+import threading
+
+# The speaker (ALSA hw:Device,0) accepts ONE process at a time. Connect
+# jingles, warnings and TTS fire from several threads; without a gate the
+# later mpg123 calls fail with 'device busy' and are simply never heard.
+# Serialize playback so every sound is played, one after another.
+_audio_lock = threading.Lock()
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 SOUND_PATH = os.path.join(BASE_DIR, "app/static/sounds/temp.mp3")
@@ -59,6 +66,12 @@ def speech_text(text):
         print(f"speech_text failed (offline and phrase not cached?): {e}")
 
 def play_sound(path):
+    """Play an mp3, queued behind any sound currently playing."""
+    with _audio_lock:
+        _play_sound_now(path)
+
+
+def _play_sound_now(path):
     # print(f"DEBUG play_sound: Attempting to play: {path}")
     # print(f"DEBUG play_sound: File exists: {os.path.exists(path)}")
     
