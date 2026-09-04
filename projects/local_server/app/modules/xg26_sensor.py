@@ -14,11 +14,13 @@
 * limitations under the License.
 '''
 import asyncio
+import random
 from bleak import BleakClient, BleakScanner, BleakError
 import struct
 import os
 from dotenv import load_dotenv
 from app.modules import globals
+from app.utils import ble_lock
 from app.utils.sound_utils import play_sound
 import threading
 from collections import deque
@@ -131,31 +133,41 @@ def create_notify_handler(uuid):
 async def connect_and_monitor():
     max_connection_retries = 5
     connection_retry_count = 0
-    
+    # Startup stagger: let the two loadcells (real-time critical) grab the
+    # single adapter first, then the sensor joins.
+    await asyncio.sleep(6)
+
     while True:
+        holding = False
         try:
+            # Serialize scan+connect on the shared adapter; release the gate
+            # the moment the link is up (or on failure) so it is never held
+            # during a backoff sleep that would block the loadcells.
+            holding = await ble_lock.acquire()
             print("Searching for xg26 sensor device...")
             device = await BleakScanner.find_device_by_address(XG26_SENSOR_ADDRESS, timeout=20.0)  # Increased timeout
             if not device:
                 print("xg26 sensor not found. Retrying...")
-                await asyncio.sleep(5)
+                ble_lock.release()
+                holding = False
+                await asyncio.sleep(5 + random.uniform(0, 3))
                 continue
 
             print(f"Found xg26 sensor, attempting to connect (attempt {connection_retry_count + 1}/{max_connection_retries})...")
-            
+
             # Connect with explicit timeout (BleakClient handles timeout internally)
             async with BleakClient(
-                device, 
+                device,
                 disconnected_callback=lambda c: print("Disconnected xg26 sensor device."),
                 timeout=30.0  # 30 second timeout for connection
             ) as client:
                 print("✓ Connected to xg26 sensor device.")
                 connection_retry_count = 0  # Reset retry count on successful connection
-                    
+
                 sound_file_path = os.path.abspath(os.path.join(__file__, "../../..", "app/static/sounds/connect-sensor.mp3"))
                 threading.Thread(target=play_sound, args=(sound_file_path,), daemon=True).start()
                 globals.set_imu_data_init(None)  # Reset IMU initial data on new connection
-                
+
                 # Enable notifications with retry
                 for uuid, (label, _, _, is_notify) in CHAR_MAP.items():
                     if is_notify:
@@ -164,6 +176,10 @@ async def connect_and_monitor():
                             print(f"✓ Notifications enabled for {label}")
                         except Exception as notify_error:
                             print(f"⚠ Failed to enable notifications for {label}: {notify_error}")
+
+                # Handshake done — free the adapter for the other devices.
+                ble_lock.release()
+                holding = False
 
                 # Main read loop with improved stability
                 read_cycle_count = 0
@@ -223,41 +239,29 @@ async def connect_and_monitor():
         except asyncio.TimeoutError:
             connection_retry_count += 1
             print(f"⚠ Connection timeout (attempt {connection_retry_count}/{max_connection_retries})")
-            
-            if connection_retry_count >= max_connection_retries:
-                print(f"⚠ Max connection retries reached. Waiting 30 seconds before retry cycle...")
-                connection_retry_count = 0
-                await asyncio.sleep(30)
-            else:
-                print("Retrying connection in 10 seconds...")
-                await asyncio.sleep(10)
-                
         except asyncio.CancelledError:
             print("XG26 sensor connection cancelled")
             connection_retry_count += 1
-            if connection_retry_count >= max_connection_retries:
-                connection_retry_count = 0
-                await asyncio.sleep(30)
-            else:
-                await asyncio.sleep(10)
-                
         except (BleakError, OSError) as e:
             connection_retry_count += 1
             print(f"⚠ Xg26 sensor connection error (attempt {connection_retry_count}/{max_connection_retries}): {e}")
-            
-            if connection_retry_count >= max_connection_retries:
-                print(f"⚠ Max connection retries reached. Waiting 30 seconds before retry cycle...")
-                connection_retry_count = 0
-                await asyncio.sleep(30)
-            else:
-                print("Reconnecting xg26 sensor in 10 seconds...")
-                await asyncio.sleep(10)
-                
         except Exception as e:
             print(f"⚠ Unexpected error in XG26 sensor: {e}")
             import traceback
             traceback.print_exc()
-            await asyncio.sleep(15)
+        finally:
+            # Never hold the adapter gate into a backoff sleep.
+            if holding:
+                ble_lock.release()
+                holding = False
+
+        # Unified jittered backoff, OUTSIDE the adapter gate.
+        if connection_retry_count >= max_connection_retries:
+            print("⚠ Max retries reached. Waiting before next cycle...")
+            connection_retry_count = 0
+            await asyncio.sleep(25 + random.uniform(0, 5))
+        else:
+            await asyncio.sleep(8 + random.uniform(0, 4))
 
 def start_xg26_sensor():
     # Create a new event loop for this thread to avoid "Future attached to a different loop" error

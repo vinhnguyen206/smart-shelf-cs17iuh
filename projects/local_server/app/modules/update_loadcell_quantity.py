@@ -18,6 +18,7 @@ import time
 import threading
 import asyncio
 import json
+import random
 from datetime import datetime
 
 import numpy as np
@@ -25,6 +26,7 @@ from dotenv import load_dotenv
 from bleak import BleakClient, BleakError
 import paho.mqtt.client as mqtt
 from app.modules import globals
+from app.utils import ble_lock
 from app.utils.loadcell_ws_utils import emit_connected_status
 from app.utils.websocket_utils import emit_loadcell_update
 from app.utils.database_utils import load_products_from_json
@@ -366,7 +368,8 @@ def notification_handler_factory(device_name):
 async def connect_and_listen(device_name, address, send_queue):
     while True:
         print(f"[{device_name}] Connecting to {address}...")
-        await asyncio.sleep(1)
+        # Only ONE device may hold the adapter during the connect handshake.
+        holding = await ble_lock.acquire()
         try:
             async with BleakClient(address, timeout=30.0) as client:
                 if client.is_connected:
@@ -383,6 +386,11 @@ async def connect_and_listen(device_name, address, send_queue):
                     except Exception as e:
                         print(f"[WARN] Could not emit loadcell_connected event: {e}")
                     await client.start_notify(LOADCELL_UUID, notification_handler_factory(device_name))
+                    # Handshake done — release the adapter so the other
+                    # devices can connect while this link keeps streaming.
+                    if holding:
+                        ble_lock.release()
+                        holding = False
                     while client.is_connected:
                         try:
                             char_uuid, data = await asyncio.wait_for(send_queue.get(), timeout=10)
@@ -400,19 +408,15 @@ async def connect_and_listen(device_name, address, send_queue):
             print(f"[{device_name}] Connection to {address} was cancelled")
         except (BleakError, OSError) as e:
             print(f"[{device_name}] Connection error: {e}")
-        # finally:
-        #     if client and client.is_connected:
-        #         try:
-        #             await client.disconnect()
-        #             print(f"[{device_name}] Disconnected cleanly.")
-        #         except Exception as e:
-        #             print(f"[{device_name}] Error on disconnect: {e}")
-        print(f"[{device_name}] Reconnecting in 5 seconds...")
+        finally:
+            if holding:
+                ble_lock.release()
         if device_name == "Loadcell_1":
             globals.bgm_220_1_connection = False
         elif device_name == "Loadcell_2":
             globals.bgm_220_2_connection = False
-        await asyncio.sleep(5)
+        # Jittered backoff so the devices don't retry in lockstep and collide.
+        await asyncio.sleep(3 + random.uniform(0, 3))
 
 async def main():
     # tasks = []
