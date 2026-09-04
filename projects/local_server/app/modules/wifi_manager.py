@@ -382,6 +382,11 @@ def start_hotspot():
             result = subprocess.run([
                 'nmcli', 'dev', 'wifi', 'hotspot',
                 'ifname', 'wlan0',
+                # con-name MUST equal the SSID: the existence check above
+                # looks up a profile by that name. Without it NM named each
+                # new profile 'Hotspot-N', the check never matched, and a
+                # fresh profile was created on every call (100+ found).
+                'con-name', HOTSPOT_SSID,
                 'ssid', HOTSPOT_SSID,
                 'password', HOTSPOT_PASSWORD
             ], capture_output=True, text=True, timeout=10)
