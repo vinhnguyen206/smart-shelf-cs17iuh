@@ -14,6 +14,7 @@ import HistoryPage from "./pages/HistoryPage";
 import PostersPage from "./pages/PostersPage";
 import ConfigPage from "./pages/ConfigPage";
 import NotificationPage from "./pages/NotificationPage";
+import MachinePage from "./pages/MachinePage";
 
 function App() {
   return (
@@ -38,6 +39,7 @@ function App() {
           <Route path="/posters" element={<PostersPage />} />
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/notifications" element={<NotificationPage />} />
+          <Route path="/machine" element={<MachinePage />} />
         </Route>
 
         <Route path="/login" element={<LoginPage />} />

@@ -99,6 +99,7 @@ const HeaderBar: React.FC = () => {
     { text: "Nhân sự", icon: <People />, path: "/users" },
     { text: "Lịch sử", icon: <History />, path: "/history" },
     { text: "Posters", icon: <Image />, path: "/posters" },
+    { text: "Máy & Thẻ", icon: <Inventory />, path: "/machine" },
   ];
 
   return (
@@ -154,6 +155,9 @@ const HeaderBar: React.FC = () => {
               </Button>
               <Button color="inherit" onClick={() => navigate("/posters")} sx={{ ml: 2 }}>
                 Posters
+              </Button>
+              <Button color="inherit" onClick={() => navigate("/machine")} sx={{ ml: 2 }}>
+                Máy & Thẻ
               </Button>
 
               <Box sx={{ ml: "auto" }}>
