@@ -20,6 +20,10 @@ Cắm điện → Jetson boot → hotspot + Control Agent (luôn chạy)
 
 ```bash
 # 1) Lấy thư mục deploy từ container ra host
+#    rm -rf là BẮT BUỘC: nếu /tmp/shelf-deploy đã tồn tại, docker cp sẽ chép
+#    LỒNG vào trong (thành /tmp/shelf-deploy/deploy/...) và bạn cài lại đúng
+#    bản cũ mà không hay biết.
+rm -rf /tmp/shelf-deploy
 docker cp iot-2708:/ultralytics/workspace/iot-challenge-2025/khang-jetson/projects/local_server/deploy /tmp/shelf-deploy
 
 # 2) Cài Control Agent (chạy khi boot)
@@ -61,8 +65,15 @@ Panel chạy từ bản đã cài ở `/opt/shelf-control/`, nên sau khi kéo c
 chép lại rồi restart (ở `dk@jetson:~$`):
 
 ```bash
+rm -rf /tmp/shelf-deploy
 docker cp iot-2708:/ultralytics/workspace/iot-challenge-2025/khang-jetson/projects/local_server/deploy /tmp/shelf-deploy
 sudo bash /tmp/shelf-deploy/setup-control-agent.sh
+```
+
+Kiểm tra đã cập nhật đúng chưa (phải ra số > 0):
+
+```bash
+grep -c Access-Control /opt/shelf-control/control_agent.py
 ```
 
 ## Ghi chú kỹ thuật
