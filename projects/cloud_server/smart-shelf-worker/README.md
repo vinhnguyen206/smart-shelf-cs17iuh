@@ -1,6 +1,7 @@
 # Smart Shelf API — Cloudflare Worker + D1
 
-**Đang chạy:** https://smart-shelf-api.nguyenthanhthienan20092006.workers.dev
+**API đang chạy:** https://smart-shelf-api.nguyenthanhthienan20092006.workers.dev
+**App quản trị:** https://smart-shelf-admin.pages.dev (Cloudflare Pages)
 · D1 `smart-shelf` (khu vực APAC) · dữ liệu thật đã chuyển từ MongoDB
 · Đo thực tế: **0,6–0,9 giây** (Render cũ: 30–60 giây khi ngủ)
 
