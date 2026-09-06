@@ -1,5 +1,7 @@
-// Cloudflare Worker config. Sau khi chay `wrangler d1 create smart-shelf`,
-// dan database_id that vao day.
+// Cloudflare Worker config - D1 dat o khu vuc APAC (gan VN).
+// Anh don hang: bat R2 trong dashboard roi them lai khoi r2_buckets:
+//   "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "smart-shelf-images" }]
+// Khong co R2 thi don hang van luu binh thuong, chi khong kem anh.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "smart-shelf-api",
@@ -15,13 +17,7 @@
     {
       "binding": "DB",
       "database_name": "smart-shelf",
-      "database_id": "PLACEHOLDER-CHAY-wrangler-d1-create"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "IMAGES",
-      "bucket_name": "smart-shelf-images"
+      "database_id": "b33d4369-721c-4623-8dd1-120281dcebea"
     }
   ]
 }

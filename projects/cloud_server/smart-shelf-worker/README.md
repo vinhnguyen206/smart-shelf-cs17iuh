@@ -1,5 +1,9 @@
 # Smart Shelf API — Cloudflare Worker + D1
 
+**Đang chạy:** https://smart-shelf-api.nguyenthanhthienan20092006.workers.dev
+· D1 `smart-shelf` (khu vực APAC) · dữ liệu thật đã chuyển từ MongoDB
+· Đo thực tế: **0,6–0,9 giây** (Render cũ: 30–60 giây khi ngủ)
+
 Backend thay cho `smart-shelf-server-backend` (Express + MongoDB trên Render).
 
 **Vì sao đổi:** Render gói free ngủ sau 15 phút → mỗi lần quẹt thẻ nạp hàng phải
@@ -67,11 +71,21 @@ POST_HISTORY_ADDED_PRODUCTS_API_KEY = "https://.../api/histories"
 VITE_API_ENDPOINT=https://smart-shelf-api.<tên>.workers.dev/api
 ```
 
-## Chuyển dữ liệu từ MongoDB sang D1
+## Chuyển dữ liệu từ MongoDB sang D1 — ĐÃ XONG
 
-Chưa làm. Khi cần: xuất từng collection ra JSON rồi sinh câu `INSERT`, giữ
-nguyên `_id` cũ làm `id` — schema thiết kế sẵn để id cũ dùng lại được, nên
-`shelf_id` mà Jetson đang có trong `.env` vẫn khớp.
+`scripts/migrate-from-mongo.py` kéo dữ liệu qua chính API Express cũ (khỏi cần
+mật khẩu Atlas), giữ nguyên `_id` cũ làm `id` nên `SHELF_ID_CLOUD` trong `.env`
+của Jetson vẫn khớp.
+
+Đã chuyển: 1 kệ · 3 người dùng · 38 sản phẩm · 15 ngăn cân · 8 poster ·
+1 cấu hình thanh toán. (15 ngăn cân "mồ côi" trỏ tới một kệ đã bị xóa nên bỏ qua.)
+
+⚠️ File `migrations/seed.sql` sinh ra **có chứa token SePay thật** → đã gitignore,
+dùng xong nên xóa.
+
+⚠️ Mật khẩu KHÔNG chuyển được (API cũ không trả về). 3 tài khoản cũ vẫn còn
+(RFID nguyên vẹn nên kệ chạy bình thường) nhưng **không đăng nhập được** —
+tạo tài khoản quản trị mới bằng `POST /api/users/register`.
 
 ## Giới hạn gói FREE (dư sức cho 1 kệ)
 
