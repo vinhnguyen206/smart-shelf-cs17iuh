@@ -1,0 +1,27 @@
+// Cloudflare Worker config. Sau khi chay `wrangler d1 create smart-shelf`,
+// dan database_id that vao day.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "smart-shelf-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "smart-shelf",
+      "database_id": "PLACEHOLDER-CHAY-wrangler-d1-create"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "IMAGES",
+      "bucket_name": "smart-shelf-images"
+    }
+  ]
+}

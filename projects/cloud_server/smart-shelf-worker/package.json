@@ -1,0 +1,21 @@
+{
+  "name": "smart-shelf-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create smart-shelf",
+    "db:migrate": "wrangler d1 migrations apply smart-shelf --remote",
+    "db:migrate:local": "wrangler d1 migrations apply smart-shelf --local"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5",
+    "@types/bcryptjs": "^2.4.6",
+    "typescript": "^5",
+    "wrangler": "^4"
+  }
+}
